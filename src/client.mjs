@@ -108,6 +108,20 @@ export function createClient({ host, email, token, fetch: fetchImpl = fetch } = 
     },
 
     /**
+     * Get a single issue by key or id, including its full description (which
+     * search responses don't return). Used by materialize().
+     *
+     * @param {string} issueKeyOrId
+     * @param {{ fields?: string[], expand?: string }} opts
+     */
+    getIssue(issueKeyOrId, { fields, expand } = {}) {
+      const query = {};
+      if (Array.isArray(fields) && fields.length > 0) query.fields = fields.join(",");
+      if (expand) query.expand = expand;
+      return request("GET", `/issue/${encodeURIComponent(issueKeyOrId)}`, { query });
+    },
+
+    /**
      * Low-level escape hatch. Useful for tests and for endpoints not yet
      * added to this client.
      */

@@ -81,7 +81,7 @@ config:
 
 ## Status
 
-v0.1.0 — Phase 1. Implements `healthcheck` + `listAvailable`. Materialise, transitions, and PR-link writes land in later phases.
+v0.2.0 — Phase 2. Implements `healthcheck`, `listAvailable`, `pickNext`, and `materialize` (full ADF→markdown rendering of Jira issue descriptions). Status transitions (`markStatus`) and PR-link writes (`attachPR`) still throw `"lands in Phase N"` errors and arrive in v0.3 / v0.4.
 
 ## License
 
