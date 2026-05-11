@@ -1,0 +1,24 @@
+{
+  "isLast": true,
+  "issues": [
+    {
+      "id": "10003",
+      "key": "SHOP-3",
+      "self": "https://myorg.atlassian.net/rest/api/3/issue/10003",
+      "fields": {
+        "summary": "Audit fix — public id leak",
+        "status": { "name": "Ready for Dev" },
+        "priority": { "name": "Highest" },
+        "issuetype": { "name": "Bug" },
+        "labels": ["security"],
+        "components": [],
+        "assignee": null,
+        "reporter": { "displayName": "Linus Torvalds" },
+        "created": "2026-05-05T09:00:00.000+0000",
+        "updated": "2026-05-09T08:00:00.000+0000",
+        "customfield_10016": 2,
+        "customfield_10014": null
+      }
+    }
+  ]
+}

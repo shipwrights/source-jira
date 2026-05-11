@@ -1,0 +1,44 @@
+{
+  "isLast": false,
+  "nextPageToken": "page-2-token",
+  "issues": [
+    {
+      "id": "10001",
+      "key": "SHOP-1",
+      "self": "https://myorg.atlassian.net/rest/api/3/issue/10001",
+      "fields": {
+        "summary": "Add bulk order endpoint",
+        "status": { "name": "Ready for Dev" },
+        "priority": { "name": "High" },
+        "issuetype": { "name": "Story" },
+        "labels": ["api"],
+        "components": [{ "name": "Orders" }],
+        "assignee": null,
+        "reporter": { "displayName": "Ada Lovelace" },
+        "created": "2026-05-01T09:00:00.000+0000",
+        "updated": "2026-05-09T12:34:00.000+0000",
+        "customfield_10016": 5,
+        "customfield_10014": "SHOP-100"
+      }
+    },
+    {
+      "id": "10002",
+      "key": "SHOP-2",
+      "self": "https://myorg.atlassian.net/rest/api/3/issue/10002",
+      "fields": {
+        "summary": "Customer history export",
+        "status": { "name": "Refined" },
+        "priority": { "name": "Medium" },
+        "issuetype": { "name": "Story" },
+        "labels": [],
+        "components": [],
+        "assignee": { "displayName": "Grace Hopper" },
+        "reporter": { "displayName": "Ada Lovelace" },
+        "created": "2026-05-02T10:00:00.000+0000",
+        "updated": "2026-05-08T15:00:00.000+0000",
+        "customfield_10016": 13,
+        "customfield_10014": null
+      }
+    }
+  ]
+}
