@@ -136,10 +136,9 @@ test("pickNext returns null when no issues match", async () => {
   assert.equal(next, null);
 });
 
-test("materialize / markStatus / attachPR throw Phase-not-yet-shipped errors", async () => {
+test("markStatus / attachPR still throw Phase-not-yet-shipped errors (Phase 2 release)", async () => {
   const stub = createFetchStub();
   const source = makeSourceWithStub(stub);
-  await assert.rejects(() => source.materialize({ id: "SHOP-1" }, "/tmp"), /Phase 2/);
   await assert.rejects(() => source.markStatus("SHOP-1", "shipped"), /Phase 3/);
   await assert.rejects(() => source.attachPR("SHOP-1", "https://x"), /Phase 4/);
 });

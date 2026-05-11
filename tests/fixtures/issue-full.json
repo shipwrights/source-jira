@@ -1,0 +1,108 @@
+{
+  "id": "10001",
+  "key": "SHOP-1",
+  "self": "https://myorg.atlassian.net/rest/api/3/issue/10001",
+  "fields": {
+    "summary": "Add bulk order endpoint",
+    "status": { "name": "Ready for Dev" },
+    "priority": { "name": "High" },
+    "issuetype": { "name": "Story" },
+    "labels": ["api", "orders"],
+    "components": [{ "name": "Orders" }],
+    "assignee": null,
+    "reporter": { "displayName": "Ada Lovelace" },
+    "created": "2026-05-01T09:00:00.000+0000",
+    "updated": "2026-05-09T12:34:00.000+0000",
+    "customfield_10016": 5,
+    "customfield_10014": "SHOP-100",
+    "description": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Customers need to submit multiple orders in a single request. "
+            },
+            {
+              "type": "text",
+              "text": "Today the API only supports one-at-a-time, and the bulk-import flow round-trips per row."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": { "level": 2 },
+          "content": [{ "type": "text", "text": "Acceptance" }]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    { "type": "text", "text": "POST " },
+                    { "type": "text", "text": "/api/orders/bulk", "marks": [{ "type": "code" }] },
+                    { "type": "text", "text": " accepts an array of up to 100 orders." }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    { "type": "text", "text": "Partial failures return a structured per-row error envelope; no all-or-nothing." }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    { "type": "text", "text": "Idempotency key on the request is honoured." }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": { "level": 2 },
+          "content": [{ "type": "text", "text": "Notes" }]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "See related docs: "
+            },
+            {
+              "type": "text",
+              "text": "rate-limit policy",
+              "marks": [{ "type": "link", "attrs": { "href": "https://example.com/docs/rate-limits" } }]
+            },
+            { "type": "text", "text": "." }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": { "language": "ts" },
+          "content": [{ "type": "text", "text": "type BulkOrderRequest = { orders: Order[]; idempotencyKey?: string };" }]
+        }
+      ]
+    }
+  }
+}

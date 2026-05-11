@@ -4,11 +4,17 @@
 //
 //   { healthcheck, listAvailable, pickNext, materialize, markStatus, attachPR }
 //
-// Phase 1 ships healthcheck + listAvailable + pickNext. The remaining three
-// land in Phases 2–4.
+// Phase 1 shipped healthcheck + listAvailable + pickNext.
+// Phase 2 (this file) adds materialize: fetch the full issue, render its ADF
+// description to markdown, write an epic file with frontmatter.
+//
+// markStatus and attachPR still throw "Phase N" errors — they land in 3 and 4.
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { createClient } from "./client.mjs";
 import { validateJql, fieldsForSearch } from "./jql.mjs";
+import { adfToMarkdown } from "./adf-to-markdown.mjs";
 
 const PRIORITY_ORDER = { Highest: 0, High: 1, Medium: 2, Low: 3, Lowest: 4 };
 
@@ -85,6 +91,102 @@ function comparePriority(a, b) {
 }
 
 /**
+ * Lowercase-hyphen-only slug, truncated to a sensible length.
+ */
+function slugify(title) {
+  return String(title ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "untitled";
+}
+
+/**
+ * Map a Jira priority name to Shipwright's P0..P3 if it matches a known label;
+ * otherwise pass through. Jira's default priorities are Highest, High, Medium,
+ * Low, Lowest — we collapse to the closest P.
+ */
+function priorityCodeFromName(name) {
+  switch (name) {
+    case "Highest":
+      return "P0";
+    case "High":
+      return "P1";
+    case "Medium":
+      return "P2";
+    case "Low":
+    case "Lowest":
+      return "P3";
+    default:
+      return name ?? "P2";
+  }
+}
+
+/**
+ * Pull a list of acceptance criteria from a description's markdown body.
+ * Recognises two common patterns:
+ *   - "## Acceptance" or "## Acceptance Criteria" heading followed by a list
+ *   - a top-level checkbox list (`- [ ] criterion`)
+ * Returns [] when no recognizable section is found.
+ */
+function extractAcceptance(markdown) {
+  if (!markdown) return [];
+  const headingRe = /^##\s+Acceptance(?:\s+Criteria)?\s*$([\s\S]*?)(?=^##\s|\Z)/im;
+  const match = markdown.match(headingRe);
+  const block = match ? match[1] : markdown;
+  const bullets = [];
+  for (const line of block.split(/\r?\n/)) {
+    const m = line.match(/^\s*[-*]\s+(?:\[[\sxX]\]\s+)?(.+?)\s*$/);
+    if (m) bullets.push(m[1]);
+  }
+  return bullets;
+}
+
+/**
+ * Build the epic markdown document from an enriched BacklogItem + rendered
+ * description. Output structure mirrors @shipwrights/core's epic schema.
+ */
+function buildEpicMarkdown(item, descriptionMd) {
+  const acceptance = extractAcceptance(descriptionMd);
+  const priorityCode = priorityCodeFromName(item.priority);
+  const sourceBlock = item.metadata
+    ? `source:\n  kind: jira\n  issue_key: ${item.metadata.issueKey}\n  jira_url: ${item.metadata.jiraUrl ?? ""}`
+    : "";
+  const acceptanceBlock = acceptance.length > 0
+    ? `acceptance:\n${acceptance.map((a) => `  - ${escapeYamlInline(a)}`).join("\n")}`
+    : "acceptance: []";
+
+  return `---
+id: ${item.id}
+title: ${escapeYamlInline(item.title)}
+status: refined
+priority: ${priorityCode}
+domain: ${item.domain ?? "full-stack"}
+owner: claude
+parents: ${formatParents(item.parents)}
+${acceptanceBlock}
+size: ${item.size ?? "medium"}
+${sourceBlock}
+---
+
+## Why
+
+${descriptionMd || "_(no description in Jira)_"}
+`;
+}
+
+function formatParents(parents) {
+  if (!Array.isArray(parents) || parents.length === 0) return "[]";
+  return `[${parents.join(", ")}]`;
+}
+
+function escapeYamlInline(value) {
+  const s = String(value ?? "");
+  if (/^[A-Za-z0-9 _\-.,!?()]+$/.test(s)) return s;
+  return JSON.stringify(s);
+}
+
+/**
  * Factory called by @shipwrights/core's source-loader.
  */
 export function createSource(rawConfig = {}) {
@@ -158,14 +260,51 @@ export function createSource(rawConfig = {}) {
     },
 
     /**
-     * Phases 2–4: not yet implemented. Each throws a clear error rather than
-     * silently no-oping, so consumers know they're on a Phase 1 release.
+     * Phase 2: fetch the Jira issue (full description), render ADF →
+     * markdown, write a refined epic file with frontmatter. Returns
+     * { epicFilePath, created } per the BacklogSource contract.
+     *
+     * The epic file is written with `status: refined` so the orchestrator
+     * skips re-running the PO refinement step. Acceptance criteria are
+     * parsed from the description if a recognizable `## Acceptance` or
+     * checkbox section is found; otherwise left empty for the user/PO to
+     * fill in.
      */
-    async materialize(_item, _targetDir) {
-      throw new Error(
-        "@shipwrights/source-jira: materialize() lands in Phase 2 (next release). Use listAvailable() / pickNext() for now and materialise epic files by hand.",
-      );
+    async materialize(item, targetDir) {
+      if (!item?.id) {
+        throw new Error("@shipwrights/source-jira: materialize() needs a BacklogItem with an id");
+      }
+      if (!targetDir || typeof targetDir !== "string") {
+        throw new Error("@shipwrights/source-jira: materialize() needs a targetDir path");
+      }
+
+      const fullFields = fieldsForSearch({ fieldMapping: field_mapping }).concat(["description"]);
+      const issue = await client.getIssue(item.id, { fields: fullFields });
+      const enriched = toBacklogItem(issue, { idPrefix: id_prefix, fieldMapping: field_mapping });
+
+      const description = adfToMarkdown(issue.fields?.description);
+      const slug = slugify(enriched.title);
+      const filename = `${enriched.id}-${slug}.md`;
+      const path = join(targetDir, filename);
+      const created = !existsSync(path);
+
+      mkdirSync(targetDir, { recursive: true });
+      const body = buildEpicMarkdown(enriched, description);
+      // Be polite: if the file already exists with status > refined, don't
+      // overwrite its body — only refresh the frontmatter title in case it
+      // changed in Jira.
+      if (!created) {
+        const existing = readFileSync(path, "utf8");
+        const status = (existing.match(/^status:\s*(\S+)/m) ?? [])[1];
+        if (status && status !== "idea" && status !== "refined") {
+          // Don't clobber in-flight epics; leave them alone.
+          return { epicFilePath: path, created: false };
+        }
+      }
+      writeFileSync(path, body, "utf8");
+      return { epicFilePath: path, created };
     },
+
     async markStatus(_itemId, _status) {
       throw new Error(
         "@shipwrights/source-jira: markStatus() lands in Phase 3 (next release).",
