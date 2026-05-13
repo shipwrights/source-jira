@@ -5,10 +5,13 @@ Jira backlog source adapter for [`@shipwrights/core`](https://github.com/shipwri
 ## Quick start
 
 ```bash
-npx @shipwrights/source-jira init
+npx @shipwrights/source-jira init           # one-time setup
+npx @shipwrights/source-jira healthcheck    # verify connection
+npx @shipwrights/source-jira ls             # list backlog items
+npx @shipwrights/source-jira pick           # show the next item to work on
 ```
 
-Walks you through six prompts (host, email, token, project, JQL, field detection), verifies the connection against Jira, and writes:
+`init` walks you through six prompts (host, email, token, project, JQL, field detection), verifies the connection against Jira, and writes:
 
 | File | Purpose |
 |---|---|
@@ -17,6 +20,8 @@ Walks you through six prompts (host, email, token, project, JQL, field detection
 | `.gitignore` | adds `.env.local` and `.shipwrights/` if missing |
 
 If something goes wrong (wrong subdomain, scoped token, etc.), the wizard prints a specific fix instead of just a raw HTTP status.
+
+The other three commands read your written config and run the same primitives the orchestrator uses — `healthcheck` is `source.healthcheck()`, `ls` is `source.listAvailable()`, `pick` is `source.pickNext()`. Useful for sanity-checking your JQL or debugging field mappings.
 
 ## Install (programmatic use)
 
