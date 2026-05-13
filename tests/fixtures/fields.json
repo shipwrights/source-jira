@@ -1,0 +1,8 @@
+[
+  { "id": "summary", "name": "Summary", "custom": false },
+  { "id": "status", "name": "Status", "custom": false },
+  { "id": "priority", "name": "Priority", "custom": false },
+  { "id": "customfield_10016", "name": "Story Points", "custom": true },
+  { "id": "customfield_10014", "name": "Epic Link", "custom": true },
+  { "id": "customfield_10020", "name": "Sprint", "custom": true }
+]

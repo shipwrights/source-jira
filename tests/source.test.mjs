@@ -55,9 +55,12 @@ test("createSource validates the jql at construction time", () => {
   );
 });
 
-test("healthcheck calls GET /myself and resolves on success", async () => {
+test("healthcheck (v0.3+): /myself + JQL dry-run pass on success", async () => {
   const stub = createFetchStub();
   stub.on("GET", "/rest/api/3/myself", { body: fx("myself.json") });
+  // v0.3 added a JQL syntax dry-run (maxResults: 0). No status_mapping is
+  // configured in makeSourceWithStub, so /status is not called.
+  stub.on("POST", "/rest/api/3/search/jql", { body: { isLast: true, issues: [] } });
   const source = makeSourceWithStub(stub);
   await source.healthcheck();
   stub.assertExhausted();
@@ -136,12 +139,9 @@ test("pickNext returns null when no issues match", async () => {
   assert.equal(next, null);
 });
 
-test("markStatus / attachPR still throw Phase-not-yet-shipped errors (Phase 2 release)", async () => {
-  const stub = createFetchStub();
-  const source = makeSourceWithStub(stub);
-  await assert.rejects(() => source.markStatus("SHOP-1", "shipped"), /Phase 3/);
-  await assert.rejects(() => source.attachPR("SHOP-1", "https://x"), /Phase 4/);
-});
+// markStatus / attachPR ship in v0.3.0 — dedicated coverage lives in
+// markStatus.test.mjs / attachPR.test.mjs. The "not yet shipped" guard
+// test has been removed.
 
 test("source-loader integration: env-var auth flow when no _client injected", async () => {
   // Save and clear env to verify env-reading.

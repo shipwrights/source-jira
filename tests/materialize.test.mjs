@@ -182,9 +182,6 @@ test("materialize handles an issue with no description (empty body but valid fil
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("markStatus / attachPR still throw Phase-not-yet-shipped errors", async () => {
-  const stub = createFetchStub();
-  const source = makeSource(stub);
-  await assert.rejects(() => source.markStatus("SHOP-1", "shipped"), /Phase 3/);
-  await assert.rejects(() => source.attachPR("SHOP-1", "https://x"), /Phase 4/);
-});
+// (markStatus / attachPR moved out of "not yet shipped" guard tests in
+// v0.3.0 — dedicated coverage lives in markStatus.test.mjs and
+// attachPR.test.mjs.)

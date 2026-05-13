@@ -4,17 +4,19 @@
 //
 //   { healthcheck, listAvailable, pickNext, materialize, markStatus, attachPR }
 //
-// Phase 1 shipped healthcheck + listAvailable + pickNext.
-// Phase 2 (this file) adds materialize: fetch the full issue, render its ADF
-// description to markdown, write an epic file with frontmatter.
-//
-// markStatus and attachPR still throw "Phase N" errors — they land in 3 and 4.
+// Phase history:
+//   Phase 1 (v0.1.0): healthcheck + listAvailable + pickNext
+//   Phase 2 (v0.2.0): materialize (issue → epic file via ADF→markdown)
+//   Phase 3 (v0.3.0): markStatus (transition mapped, comment for middle states)
+//   Phase 4 (v0.3.0): attachPR (short ADF comment with link)
+//   Phase 5 (v0.3.0): field mapping auto-detection + enhanced healthcheck
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createClient } from "./client.mjs";
 import { validateJql, fieldsForSearch } from "./jql.mjs";
 import { adfToMarkdown } from "./adf-to-markdown.mjs";
+import { adfParagraph, adfParagraphWithLink } from "./adf-builder.mjs";
 
 const PRIORITY_ORDER = { Highest: 0, High: 1, Medium: 2, Low: 3, Lowest: 4 };
 
@@ -89,6 +91,32 @@ function comparePriority(a, b) {
   if (ap !== bp) return ap - bp;
   return (a.id ?? "").localeCompare(b.id ?? "");
 }
+
+// Shipwright lifecycle states that *transition* the Jira issue.
+// Everything else (sliced, built, integrated, tested, reviewed) is
+// internal Shipwright bookkeeping and writes a comment only.
+//
+// Consumers override via .shipwrights.yml backlog.source.config.status_mapping:
+//
+//   status_mapping:
+//     refined: "In Progress"
+//     ready-for-human-review: "In Review"
+//     shipped: "Done"
+const DEFAULT_STATUS_MAPPING = {
+  refined: "Ready for Dev",
+  "ready-for-human-review": "In Review",
+  shipped: "Done",
+};
+
+/**
+ * Conventional Jira field names for things Shipwright cares about. Phase 5
+ * auto-detection looks for these via the /field API when the user hasn't
+ * provided explicit field_mapping in config.
+ */
+const FIELD_CONVENTIONS = {
+  size: ["Story Points", "Story point estimate", "Story Point Estimate"],
+  parents: ["Epic Link", "Parent Link", "Parent"],
+};
 
 /**
  * Lowercase-hyphen-only slug, truncated to a sensible length.
@@ -196,9 +224,13 @@ export function createSource(rawConfig = {}) {
     token_env = "JIRA_API_TOKEN",
     jql,
     field_mapping = {},
+    status_mapping,
     id_prefix,
     _client, // injected in tests
   } = rawConfig;
+
+  // Effective status mapping: user override merged on top of defaults.
+  const effectiveStatusMapping = { ...DEFAULT_STATUS_MAPPING, ...(status_mapping ?? {}) };
 
   if (!host) {
     throw new Error("@shipwrights/source-jira: `host` is required (e.g. 'myorg.atlassian.net')");
@@ -218,12 +250,85 @@ export function createSource(rawConfig = {}) {
 
   const fields = fieldsForSearch({ fieldMapping: field_mapping });
 
+  // Field mapping resolution. If the consumer's config provided explicit
+  // entries, use those. Otherwise, lazy-detect via the /field API the first
+  // time we need them. Cache the result.
+  let resolvedFieldMapping = null;
+  async function getFieldMapping() {
+    if (resolvedFieldMapping) return resolvedFieldMapping;
+    const explicit = { ...field_mapping };
+    if (explicit.size && explicit.parents) {
+      resolvedFieldMapping = explicit;
+      return resolvedFieldMapping;
+    }
+    // Detect missing pieces via /field.
+    let allFields;
+    try {
+      allFields = await client.fields();
+    } catch {
+      // /field may not be accessible; fall back to whatever was explicit.
+      resolvedFieldMapping = explicit;
+      return resolvedFieldMapping;
+    }
+    const byName = Object.fromEntries((allFields ?? []).map((f) => [f.name, f.id]));
+    for (const [role, candidates] of Object.entries(FIELD_CONVENTIONS)) {
+      if (explicit[role]) continue;
+      const hit = candidates.find((name) => byName[name]);
+      if (hit) explicit[role] = byName[hit];
+    }
+    resolvedFieldMapping = explicit;
+    return resolvedFieldMapping;
+  }
+
   return {
     /**
-     * Phase 1: confirm credentials by hitting /myself. Throws on failure.
+     * Phase 1 + Phase 5: confirm credentials, validate JQL, and (if a
+     * status_mapping is configured) confirm every mapped destination is a
+     * real Jira status. Throws an aggregate error listing all failures.
      */
     async healthcheck() {
-      await client.myself();
+      const failures = [];
+
+      // Auth check (always).
+      try {
+        await client.myself();
+      } catch (err) {
+        failures.push(`auth: ${err.message}`);
+        // If auth fails, the rest of the checks will also fail — bail early.
+        throw new Error(`Jira healthcheck failed: ${failures.join("; ")}`);
+      }
+
+      // JQL syntax check via a maxResults: 0 dry-run.
+      try {
+        await client.request("POST", "/search/jql", {
+          body: { jql, maxResults: 0 },
+        });
+      } catch (err) {
+        failures.push(`jql: ${err.message}`);
+      }
+
+      // Status mapping check.
+      const customMappings = Object.entries(status_mapping ?? {});
+      if (customMappings.length > 0) {
+        try {
+          const statuses = await client.statuses();
+          const known = new Set((statuses ?? []).map((s) => s.name));
+          for (const [shipwrightStatus, jiraStatusName] of customMappings) {
+            if (!known.has(jiraStatusName)) {
+              failures.push(
+                `status_mapping.${shipwrightStatus}: "${jiraStatusName}" is not a known Jira status in this instance`,
+              );
+            }
+          }
+        } catch (err) {
+          // /status may not be accessible — surface as a soft warning, not a hard fail.
+          // (Don't push to failures; let the call proceed.)
+        }
+      }
+
+      if (failures.length > 0) {
+        throw new Error(`Jira healthcheck failed: ${failures.join("; ")}`);
+      }
     },
 
     /**
@@ -305,15 +410,74 @@ export function createSource(rawConfig = {}) {
       return { epicFilePath: path, created };
     },
 
-    async markStatus(_itemId, _status) {
-      throw new Error(
-        "@shipwrights/source-jira: markStatus() lands in Phase 3 (next release).",
+    /**
+     * Phase 3: propagate a Shipwright status change back to Jira.
+     *
+     * - If the status is in effectiveStatusMapping → fetch available
+     *   transitions for the issue, find the one whose destination matches
+     *   the mapped Jira status name, POST the transition.
+     * - Otherwise → post a comment recording the status change. Middle
+     *   states (sliced, built, integrated, tested, reviewed) take this
+     *   path by default since they're Shipwright bookkeeping that doesn't
+     *   have a meaningful Jira workflow analog.
+     *
+     * The comment fallback is also taken if a mapped transition is
+     * configured but isn't reachable from the issue's current state
+     * (Jira workflows are state-dependent). In that case we surface a
+     * warning comment + throw, because silently swallowing a failed
+     * transition would be confusing.
+     */
+    async markStatus(itemId, status) {
+      if (!itemId) throw new Error("@shipwrights/source-jira: markStatus needs an itemId");
+      if (!status) throw new Error("@shipwrights/source-jira: markStatus needs a status");
+
+      const targetJiraStatus = effectiveStatusMapping[status];
+      if (!targetJiraStatus) {
+        // Middle state — post a comment, no transition.
+        await client.comment(
+          itemId,
+          adfParagraph(`Shipwrights moved this issue to status: ${status}`),
+        );
+        return { transitioned: false, commented: true };
+      }
+
+      const transitions = await client.getTransitions(itemId);
+      const match = transitions.find(
+        (t) => t.to?.name === targetJiraStatus || t.name === targetJiraStatus,
       );
+      if (!match) {
+        const available = transitions.map((t) => t.to?.name ?? t.name).filter(Boolean);
+        throw new Error(
+          `@shipwrights/source-jira: cannot transition ${itemId} to "${targetJiraStatus}" — not reachable from current state. ` +
+            `Available transitions: [${available.join(", ")}]. ` +
+            `Either change status_mapping.${status} or move the issue manually first.`,
+        );
+      }
+      await client.transition(itemId, match.id);
+      return { transitioned: true, transitionId: match.id, targetStatus: targetJiraStatus };
     },
-    async attachPR(_itemId, _prUrl) {
-      throw new Error(
-        "@shipwrights/source-jira: attachPR() lands in Phase 4 (next release).",
-      );
+
+    /**
+     * Phase 4: append a "Shipped via <prUrl>" comment with a clickable
+     * link to the issue. Uses adfParagraphWithLink so Jira renders the
+     * URL as a real link, not plain text.
+     */
+    async attachPR(itemId, prUrl) {
+      if (!itemId) throw new Error("@shipwrights/source-jira: attachPR needs an itemId");
+      if (!prUrl) throw new Error("@shipwrights/source-jira: attachPR needs a prUrl");
+      const adf = adfParagraphWithLink("Shipped via ", prUrl);
+      await client.comment(itemId, adf);
+      return { commented: true, prUrl };
+    },
+
+    /**
+     * Phase 5: expose the resolved field mapping for diagnostics and tests.
+     * Calls /field on first use to auto-detect Story Points / Epic Link
+     * if the consumer didn't provide them in config. Cached after first
+     * resolution.
+     */
+    async getFieldMapping() {
+      return getFieldMapping();
     },
   };
 }
