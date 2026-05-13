@@ -31,6 +31,7 @@ import {
   confirm,
   choose,
 } from "./prompt.mjs";
+import { composeJql } from "./composeJql.mjs";
 
 const FIELD_CONVENTIONS = {
   size: ["Story Points", "Story point estimate"],
@@ -106,14 +107,24 @@ export async function runInit({ cwd = process.cwd() } = {}) {
     });
   }
 
-  // ----- 6. JQL -----
-  const defaultJql = `project = ${projectKey} AND statusCategory != Done`;
+  // ----- 6a. sprint scope -----
+  const sprintChoice = await pickSprintScope(client, projectKey);
+
+  // ----- 6b. assignment scope -----
+  const assigneeChoice = await pickAssigneeScope();
+
+  // ----- 6c. compose + confirm JQL -----
+  const proposedJql = composeJql({
+    projectKey,
+    sprint: sprintChoice,
+    assignee: assigneeChoice,
+  });
   const useDefault = await confirm(
-    `\nUse default JQL:\n  ${defaultJql}\nOK?`,
+    `\nProposed JQL:\n  ${proposedJql}\nOK?`,
     { default: true },
   );
   const jql = useDefault
-    ? defaultJql
+    ? proposedJql
     : await prompt("Custom JQL", {
         validate: (v) => (v.length === 0 ? "Required." : null),
       });
@@ -170,6 +181,96 @@ export async function runInit({ cwd = process.cwd() } = {}) {
   stdout.write(`  npx @shipwrights/source-jira healthcheck   — verify the connection\n`);
   stdout.write(`  npx @shipwrights/source-jira ls            — list backlog items\n`);
   stdout.write(`  npx @shipwrights/source-jira pick          — show the highest-priority item\n\n`);
+}
+
+async function pickSprintScope(client, projectKey) {
+  stdout.write("\nChecking for active sprints ... ");
+  let activeSprints = [];
+  try {
+    const boards = (await client.boards({ projectKeyOrId: projectKey, type: "scrum" }))?.values ?? [];
+    for (const board of boards) {
+      try {
+        const page = await client.sprintsForBoard(board.id, { state: "active" });
+        for (const s of page?.values ?? []) {
+          activeSprints.push({ id: s.id, name: s.name, boardName: board.name });
+        }
+      } catch {
+        // a board may forbid sprint access; skip silently
+      }
+    }
+    stdout.write(`${activeSprints.length} found\n`);
+  } catch (err) {
+    stdout.write("none (no boards or no agile access)\n");
+    return { kind: "none" };
+  }
+
+  if (activeSprints.length === 0) {
+    return { kind: "none" };
+  }
+
+  const options = [
+    {
+      label: "Active sprint(s) (recommended)",
+      jqlPreview: "sprint in openSprints()",
+      value: { kind: "active" },
+    },
+    {
+      label: "A specific named sprint",
+      jqlPreview: 'sprint = "<name>"',
+      value: { kind: "pick-specific" },
+    },
+    {
+      label: "All not-Done tickets (ignore sprint)",
+      jqlPreview: "(no sprint filter)",
+      value: { kind: "none" },
+    },
+  ];
+  const picked = await choose(
+    `\nFound ${activeSprints.length} active sprint(s). How should we scope by sprint?`,
+    options,
+    { format: (o) => `${o.label.padEnd(40)} ${o.jqlPreview}` },
+  );
+
+  if (picked.value.kind === "pick-specific") {
+    const sprint = await choose(
+      "\nWhich sprint?",
+      activeSprints,
+      { format: (s) => `${s.name}  (board: ${s.boardName})` },
+    );
+    return { kind: "specific", name: sprint.name };
+  }
+  return picked.value;
+}
+
+async function pickAssigneeScope() {
+  const options = [
+    {
+      label: "Mine + unassigned (recommended)",
+      jqlPreview: "assignee = me OR is EMPTY",
+      value: { kind: "mine-or-unassigned" },
+    },
+    {
+      label: "Only assigned to me",
+      jqlPreview: "assignee = currentUser()",
+      value: { kind: "mine" },
+    },
+    {
+      label: "Only unassigned",
+      jqlPreview: "assignee is EMPTY",
+      value: { kind: "unassigned" },
+    },
+    {
+      label: "Anyone (no assignee filter)",
+      jqlPreview: "(no assignee filter)",
+      value: { kind: "any" },
+    },
+  ];
+  const picked = await choose(
+    "\nWhich tickets should the orchestrator pick up?",
+    options,
+    { format: (o) => `${o.label.padEnd(40)} ${o.jqlPreview}` },
+  );
+  return picked.value;
 }
 
 function detectFields(allFields) {

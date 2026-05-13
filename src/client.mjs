@@ -12,6 +12,7 @@
 //   client.issue(issueKey)
 
 const API_BASE = "/rest/api/3";
+const AGILE_BASE = "/rest/agile/1.0";
 
 class JiraClientError extends Error {
   constructor(message, status, body) {
@@ -28,10 +29,11 @@ export function createClient({ host, email, token, fetch: fetchImpl = fetch } = 
   if (!token) throw new Error("Jira client: token is required (API token from id.atlassian.com)");
 
   const baseUrl = `https://${host}${API_BASE}`;
+  const agileBaseUrl = `https://${host}${AGILE_BASE}`;
   const authHeader = `Basic ${Buffer.from(`${email}:${token}`).toString("base64")}`;
 
-  async function request(method, path, { body, query } = {}) {
-    const url = new URL(`${baseUrl}${path}`);
+  async function rawRequest(targetBase, method, path, { body, query } = {}) {
+    const url = new URL(`${targetBase}${path}`);
     if (query) {
       for (const [k, v] of Object.entries(query)) {
         if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
@@ -64,6 +66,14 @@ export function createClient({ host, email, token, fetch: fetchImpl = fetch } = 
 
     if (response.status === 204) return null;
     return response.json();
+  }
+
+  async function request(method, path, opts) {
+    return rawRequest(baseUrl, method, path, opts);
+  }
+
+  async function requestAgile(method, path, opts) {
+    return rawRequest(agileBaseUrl, method, path, opts);
   }
 
   return {
@@ -190,6 +200,58 @@ export function createClient({ host, email, token, fetch: fetchImpl = fetch } = 
       const query = {};
       if (recent !== undefined) query.recent = recent;
       return request("GET", "/project", { query });
+    },
+
+    /**
+     * List Scrum boards visible to the user, optionally scoped to a
+     * project. Lives on the Agile API ({@code /rest/agile/1.0}), which is
+     * a sibling of the REST API. Used by the init wizard to detect
+     * sprint-driven projects.
+     *
+     * Throws if the user lacks Agile access (403); callers should handle
+     * gracefully (a project without boards is still a valid project).
+     *
+     * @param {{ projectKeyOrId?: string, type?: "scrum"|"kanban" }} opts
+     */
+    boards({ projectKeyOrId, type } = {}) {
+      const query = {};
+      if (projectKeyOrId) query.projectKeyOrId = projectKeyOrId;
+      if (type) query.type = type;
+      // Agile API is at a different base — bypass API_BASE.
+      return requestAgile("GET", "/board", { query });
+    },
+
+    /**
+     * List sprints for a board. Use {@code state: "active"} for current
+     * sprints, "future" for planned, "closed" for past.
+     *
+     * @param {number|string} boardId
+     * @param {{ state?: "active"|"future"|"closed" }} opts
+     */
+    sprintsForBoard(boardId, { state } = {}) {
+      const query = {};
+      if (state) query.state = state;
+      return requestAgile(
+        "GET",
+        `/board/${encodeURIComponent(boardId)}/sprint`,
+        { query },
+      );
+    },
+
+    /**
+     * Assign an issue to a specific Atlassian account. Pass null/empty
+     * accountId to unassign. Used by the loop's "0 candidates" fallback
+     * when the user picks an unassigned ticket to claim.
+     *
+     * @param {string} issueKeyOrId
+     * @param {string|null} accountId
+     */
+    assignIssue(issueKeyOrId, accountId) {
+      return request(
+        "PUT",
+        `/issue/${encodeURIComponent(issueKeyOrId)}/assignee`,
+        { body: { accountId: accountId ?? null } },
+      );
     },
 
     /**

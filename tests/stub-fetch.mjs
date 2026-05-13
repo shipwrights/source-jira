@@ -27,10 +27,13 @@ export function createFetchStub() {
       const parsed = new URL(url);
       const path = parsed.pathname + parsed.search;
       const method = (init.method ?? "GET").toUpperCase();
+      const query = Object.fromEntries(parsed.searchParams.entries());
       const requestRecord = {
         method,
         url,
         path,
+        pathname: parsed.pathname,
+        query,
         headers: init.headers ?? {},
         body: init.body ? JSON.parse(init.body) : undefined,
       };
