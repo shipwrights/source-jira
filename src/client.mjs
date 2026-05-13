@@ -122,6 +122,64 @@ export function createClient({ host, email, token, fetch: fetchImpl = fetch } = 
     },
 
     /**
+     * List available transitions for an issue at its current status. Used by
+     * markStatus() to resolve a destination status name to a transition id.
+     */
+    async getTransitions(issueKeyOrId) {
+      const body = await request(
+        "GET",
+        `/issue/${encodeURIComponent(issueKeyOrId)}/transitions`,
+      );
+      return body?.transitions ?? [];
+    },
+
+    /**
+     * Perform a transition by id. Returns null on 204 success.
+     */
+    transition(issueKeyOrId, transitionId, { fields, update } = {}) {
+      return request(
+        "POST",
+        `/issue/${encodeURIComponent(issueKeyOrId)}/transitions`,
+        {
+          body: {
+            transition: { id: String(transitionId) },
+            ...(fields ? { fields } : {}),
+            ...(update ? { update } : {}),
+          },
+        },
+      );
+    },
+
+    /**
+     * Post a comment on an issue. Body must be ADF (Atlassian Document
+     * Format); use adfParagraph() from src/index.mjs for short messages.
+     */
+    comment(issueKeyOrId, adfBody) {
+      return request(
+        "POST",
+        `/issue/${encodeURIComponent(issueKeyOrId)}/comment`,
+        { body: { body: adfBody } },
+      );
+    },
+
+    /**
+     * List all custom + standard fields. Used by field mapping
+     * auto-detection (Phase 5) to find "Story Points" / "Epic Link".
+     */
+    fields() {
+      return request("GET", "/field");
+    },
+
+    /**
+     * List all statuses defined in the Jira instance. Used by
+     * healthcheck() (Phase 5) to validate the configured status_mapping
+     * resolves to real Jira statuses.
+     */
+    statuses() {
+      return request("GET", "/status");
+    },
+
+    /**
      * Low-level escape hatch. Useful for tests and for endpoints not yet
      * added to this client.
      */
