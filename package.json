@@ -1,6 +1,6 @@
 {
   "name": "@shipwrights/source-jira",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Jira backlog source adapter for @shipwrights/core. Pulls issues via JQL, materialises them as epic files, writes status transitions and PR links back to Jira.",
   "type": "module",
   "main": "./src/index.mjs",

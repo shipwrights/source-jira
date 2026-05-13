@@ -167,8 +167,9 @@ export async function runInit({ cwd = process.cwd() } = {}) {
   }
 
   stdout.write(`\n✓ Done. Next:\n`);
-  stdout.write(`  • Try it:  node -e "import('@shipwrights/source-jira').then(m => m.createSource(require('./.shipwrights/jira.json')).healthcheck())"\n`);
-  stdout.write(`  • Or wire it into your orchestrator with createSource(...)\n\n`);
+  stdout.write(`  npx @shipwrights/source-jira healthcheck   — verify the connection\n`);
+  stdout.write(`  npx @shipwrights/source-jira ls            — list backlog items\n`);
+  stdout.write(`  npx @shipwrights/source-jira pick          — show the highest-priority item\n\n`);
 }
 
 function detectFields(allFields) {
