@@ -17,6 +17,7 @@ export async function runPick() {
   stdout.write(`  status:   ${item.status ?? "-"}\n`);
   stdout.write(`  priority: ${item.priority ?? "-"}\n`);
   stdout.write(`  size:     ${item.size ?? "-"}\n`);
+  stdout.write(`  assignee: ${item.metadata?.assignee ?? "(unassigned)"}\n`);
   const parents =
     Array.isArray(item.parents) && item.parents.length > 0
       ? item.parents.join(", ")

@@ -65,6 +65,7 @@ function toBacklogItem(issue, { idPrefix, fieldMapping }) {
       issueId: issue.id,
       jiraUrl: issue.self,
       assignee: fields.assignee?.displayName,
+      assigneeAccountId: fields.assignee?.accountId ?? null,
       reporter: fields.reporter?.displayName,
       created: fields.created,
       updated: fields.updated,
@@ -254,6 +255,7 @@ export function createSource(rawConfig = {}) {
   // entries, use those. Otherwise, lazy-detect via the /field API the first
   // time we need them. Cache the result.
   let resolvedFieldMapping = null;
+  let currentUserCache = null;
   async function getFieldMapping() {
     if (resolvedFieldMapping) return resolvedFieldMapping;
     const explicit = { ...field_mapping };
@@ -481,6 +483,35 @@ export function createSource(rawConfig = {}) {
      */
     async getFieldMapping() {
       return getFieldMapping();
+    },
+
+    /**
+     * v0.5: return the authenticated user's accountId + displayName.
+     * Cached after first call. Used by the loop to detect when a ticket
+     * is assigned to someone *other* than the authenticated user.
+     */
+    async currentUser() {
+      if (!currentUserCache) {
+        const me = await client.myself();
+        currentUserCache = {
+          accountId: me.accountId,
+          displayName: me.displayName,
+          email: me.emailAddress,
+        };
+      }
+      return currentUserCache;
+    },
+
+    /**
+     * v0.5: self-assign a ticket. Used by the loop's "0 candidates"
+     * fallback when the user picks one of the unassigned tickets to
+     * claim before driving it through the pipeline.
+     */
+    async assignToCurrentUser(itemId) {
+      if (!itemId) throw new Error("@shipwrights/source-jira: assignToCurrentUser needs an itemId");
+      const me = await this.currentUser();
+      await client.assignIssue(itemId, me.accountId);
+      return { assigned: true, accountId: me.accountId, displayName: me.displayName };
     },
   };
 }

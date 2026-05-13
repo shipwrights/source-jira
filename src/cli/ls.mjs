@@ -17,23 +17,20 @@ export async function runLs({ limit } = {}) {
   }
 
   // Column widths derived from the data so wide statuses don't overflow.
+  const assigneeOf = (i) => i.metadata?.assignee ?? "(unassigned)";
   const idW = Math.max(...shown.map((i) => i.id?.length ?? 0));
-  const statusW = Math.max(
-    ...shown.map((i) => (i.status ?? "?").length),
-    6,
-  );
-  const priorityW = Math.max(
-    ...shown.map((i) => (i.priority ?? "?").length),
-    8,
-  );
+  const statusW = Math.max(...shown.map((i) => (i.status ?? "?").length), 6);
+  const priorityW = Math.max(...shown.map((i) => (i.priority ?? "?").length), 8);
   const sizeW = Math.max(...shown.map((i) => (i.size ?? "-").length), 6);
+  const assigneeW = Math.max(...shown.map((i) => assigneeOf(i).length), 12);
 
   for (const item of shown) {
     stdout.write(
       `  ${(item.id ?? "?").padEnd(idW)}  ` +
         `[${(item.status ?? "?").padEnd(statusW)} | ` +
         `${(item.priority ?? "?").padEnd(priorityW)} | ` +
-        `${(item.size ?? "-").padEnd(sizeW)}]  ` +
+        `${(item.size ?? "-").padEnd(sizeW)} | ` +
+        `${assigneeOf(item).padEnd(assigneeW)}]  ` +
         `${item.title ?? ""}\n`,
     );
   }
