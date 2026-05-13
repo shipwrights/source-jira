@@ -87,7 +87,7 @@ test("healthcheck passes /myself + JQL dry-run + status mapping all green", asyn
   const stub = createFetchStub();
   stub.on("GET", "/rest/api/3/myself", { body: { displayName: "Ada" } });
   stub.on("POST", "/rest/api/3/search/jql", (req) => {
-    assert.equal(req.body.maxResults, 0); // dry-run
+    assert.equal(req.body.maxResults, 1); // dry-run, smallest legal value
     return { body: { isLast: true, issues: [] } };
   });
   stub.on("GET", "/rest/api/3/status", { body: fx("statuses.json") });

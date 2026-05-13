@@ -298,10 +298,13 @@ export function createSource(rawConfig = {}) {
         throw new Error(`Jira healthcheck failed: ${failures.join("; ")}`);
       }
 
-      // JQL syntax check via a maxResults: 0 dry-run.
+      // JQL syntax check via a minimal dry-run. Some Jira tenants reject
+      // maxResults: 0 ("max results parameter has to be between 1 and 5,000")
+      // even though it's documented as legal — so we ask for 1 and ignore
+      // any issue that comes back.
       try {
         await client.request("POST", "/search/jql", {
-          body: { jql, maxResults: 0 },
+          body: { jql, maxResults: 1 },
         });
       } catch (err) {
         failures.push(`jql: ${err.message}`);
