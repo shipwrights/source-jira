@@ -43,7 +43,8 @@ async function main() {
     default:
       process.stderr.write(`Unknown subcommand: ${subcommand}\n\n`);
       printHelp();
-      process.exit(2);
+      process.exitCode = 2;
+      return;
   }
 }
 
@@ -94,5 +95,5 @@ main().catch((err) => {
   if (err && err.message && err.message !== "connection failed") {
     process.stderr.write(`\nError: ${err.message}\n`);
   }
-  process.exit(1);
+  process.exitCode = 1;
 });
