@@ -180,6 +180,19 @@ export function createClient({ host, email, token, fetch: fetchImpl = fetch } = 
     },
 
     /**
+     * List projects the authenticated user can see. Used by the init
+     * wizard to offer a project picker.
+     *
+     * @param {{ recent?: number }} opts — Jira returns a "recent" set if
+     *   asked; default behaviour is server-paginated full list.
+     */
+    projects({ recent } = {}) {
+      const query = {};
+      if (recent !== undefined) query.recent = recent;
+      return request("GET", "/project", { query });
+    },
+
+    /**
      * Low-level escape hatch. Useful for tests and for endpoints not yet
      * added to this client.
      */
