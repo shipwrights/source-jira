@@ -221,6 +221,8 @@ function escapeYamlInline(value) {
 export function createSource(rawConfig = {}) {
   const {
     host,
+    email,
+    token,
     email_env = "JIRA_EMAIL",
     token_env = "JIRA_API_TOKEN",
     jql,
@@ -245,8 +247,8 @@ export function createSource(rawConfig = {}) {
 
   const client = _client ?? createClient({
     host,
-    email: readEnv(email_env, "Jira email"),
-    token: readEnv(token_env, "Jira API token"),
+    email: email ?? readEnv(email_env, "Jira email"),
+    token: token ?? readEnv(token_env, "Jira API token"),
   });
 
   const fields = fieldsForSearch({ fieldMapping: field_mapping });
