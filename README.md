@@ -2,7 +2,23 @@
 
 Jira backlog source adapter for [`@shipwrights/core`](https://github.com/shipwrights/core). Pulls issues via JQL, materialises them as epic files, writes status transitions and PR links back to Jira.
 
-## Install
+## Quick start
+
+```bash
+npx @shipwrights/source-jira init
+```
+
+Walks you through six prompts (host, email, token, project, JQL, field detection), verifies the connection against Jira, and writes:
+
+| File | Purpose |
+|---|---|
+| `.env.local` | `JIRA_HOST`, `JIRA_EMAIL`, `JIRA_API_TOKEN` (gitignored) |
+| `.shipwrights/jira.json` | non-secret config (host, email, jql, field mapping) |
+| `.gitignore` | adds `.env.local` and `.shipwrights/` if missing |
+
+If something goes wrong (wrong subdomain, scoped token, etc.), the wizard prints a specific fix instead of just a raw HTTP status.
+
+## Install (programmatic use)
 
 ```bash
 npm install -D @shipwrights/core @shipwrights/source-jira
@@ -10,18 +26,16 @@ npm install -D @shipwrights/core @shipwrights/source-jira
 pnpm add -D @shipwrights/core @shipwrights/source-jira
 ```
 
-## Configure
+## Configure manually
 
-Generate a Jira API token at https://id.atlassian.com/manage-profile/security/api-tokens.
-
-Set env vars in your shell or `.env`:
+If you don't want the wizard, generate a Jira API token at https://id.atlassian.com/manage-profile/security/api-tokens, then set env vars:
 
 ```bash
 export JIRA_EMAIL=you@example.com
 export JIRA_API_TOKEN=<your-token>
 ```
 
-Reference them from `.shipwright.yml`:
+Reference them from `.shipwrights.yml`:
 
 ```yaml
 backlog:
@@ -81,7 +95,7 @@ config:
 
 ## Status
 
-v0.2.0 — Phase 2. Implements `healthcheck`, `listAvailable`, `pickNext`, and `materialize` (full ADF→markdown rendering of Jira issue descriptions). Status transitions (`markStatus`) and PR-link writes (`attachPR`) still throw `"lands in Phase N"` errors and arrive in v0.3 / v0.4.
+v0.4.0 — `init` wizard, full write-back surface (`markStatus`, `attachPR`), field auto-detection, enhanced healthcheck. End-to-end pilot-validated against a live Atlassian Cloud tenant.
 
 ## License
 
