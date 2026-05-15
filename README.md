@@ -102,6 +102,10 @@ config:
 
 v0.4.0 — `init` wizard, full write-back surface (`markStatus`, `attachPR`), field auto-detection, enhanced healthcheck. End-to-end pilot-validated against a live Atlassian Cloud tenant.
 
+## Contributing
+
+We welcome contributions. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to set up, run tests, and open a PR. Security issues should be reported privately — see [`SECURITY.md`](SECURITY.md). All participants follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## License
 
 MIT
